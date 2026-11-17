@@ -29,6 +29,7 @@ The Windows app uses the WebView2 runtime that ships with Windows 10 and 11. On 
 - **Images to PDF** (JPG, PNG, WebP, GIF, BMP; phone photos are turned the right way up) and **PDF to images** (JPG or PNG at 72, 150 or 300 dpi).
 - **Remove hidden information** such as author, software and dates stored inside the file.
 - Opens password-protected PDFs. Protected or damaged files that can't be edited directly are saved with their pages as images.
+- Zoom: make page thumbnails bigger or smaller, and zoom up to 600% in the page editor with the buttons, Ctrl + mouse wheel or a pinch, then drag to move around.
 - Undo and redo for page changes, keyboard shortcuts, light and dark themes, works offline.
 
 ## Privacy
@@ -40,6 +41,9 @@ Files are read and written in the browser tab, or inside the Windows or Android 
 | Keys | Action |
 | --- | --- |
 | Ctrl+S | Save PDF |
+| Ctrl + / Ctrl - | Larger or smaller pages; zoom in or out in the page editor |
+| Ctrl+0 | Reset the page size, or fit the page in the editor |
+| Ctrl + mouse wheel | Same as Ctrl + and Ctrl - (pinch works on touch screens and trackpads) |
 | Ctrl+Z / Ctrl+Y | Undo / redo |
 | Ctrl+A | Select all pages |
 | Delete | Delete selected pages (or the selected item in the page editor) |

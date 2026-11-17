@@ -1,6 +1,6 @@
 [package]
 name = "private-pdf"
-version = "1.0.1"
+version = "1.0.2"
 description = "Private PDF for Windows"
 edition = "2021"
 

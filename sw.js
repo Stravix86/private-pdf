@@ -1,6 +1,6 @@
 // Offline support. The app and PDF engine are cached on first visit; font and character
 // map files are cached the first time a document needs them.
-const CACHE = 'privatepdf-v2';
+const CACHE = 'privatepdf-v3';
 const CORE = ['./', 'index.html', 'style.css', 'js/app.js', 'js/engine.js', 'js/sign.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png',
   'vendor/pdf-lib.min.js', 'vendor/pdf.min.js', 'vendor/pdf.worker.min.js'];

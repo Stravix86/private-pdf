@@ -254,8 +254,10 @@ function showWork() {
 function closeAll() {
   if (S.pages.length && !confirm('Close these files? Changes you haven\'t saved will be lost.')) return;
   for (const s of S.srcs.values()) E.closeSource(s);
-  for (const url of thumbs.values()) URL.revokeObjectURL(url);
+  for (const t of thumbs.values()) URL.revokeObjectURL(t.url);
+  for (const url of oldThumbs) URL.revokeObjectURL(url);
   thumbs.clear();
+  oldThumbs.length = 0;
   S.srcs.clear();
   S.pages = [];
   S.sel.clear();
@@ -337,23 +339,36 @@ function overlayEl(o, d, editable) {
 
 // ---------- thumbnails ----------
 
-const thumbs = new Map(); // "src:i" -> object URL
-const waiting = new Map(); // key -> Promise
-const thumbWidth = () => Math.min(520, Math.round(240 * Math.min(2, window.devicePixelRatio || 1)));
+const thumbs = new Map(); // "src:i" -> { url, w } (w = rendered width in pixels)
+const oldThumbs = []; // smaller renders replaced by sharper ones; freed when the files are closed
+const waiting = new Map(); // "src:i:w" -> Promise
+
+// Thumbnails come in a few sizes so a zoomed-in grid stays sharp without constant re-rendering.
+function thumbWidth() {
+  const cell = $('#grid .cell')?.clientWidth || GZ_STEPS[gzIndex];
+  const tier = cell <= 210 ? 240 : cell <= 380 ? 420 : 720;
+  return Math.round(tier * Math.min(2, window.devicePixelRatio || 1));
+}
 
 function thumbFor(p, urgent = false) {
   const key = `${p.src}:${p.i}`;
-  if (thumbs.has(key)) return Promise.resolve(thumbs.get(key));
-  if (!waiting.has(key)) {
+  const need = thumbWidth();
+  const have = thumbs.get(key);
+  if (have && have.w >= need) return Promise.resolve(have.url);
+  const wkey = `${key}:${need}`;
+  if (!waiting.has(wkey)) {
     const src = S.srcs.get(p.src);
-    waiting.set(key, E.renderPage(src, p.i, { width: thumbWidth(), quality: 0.8, urgent }).then((b) => {
+    waiting.set(wkey, E.renderPage(src, p.i, { width: need, quality: 0.8, urgent }).then((b) => {
+      waiting.delete(wkey);
+      const prev = thumbs.get(key);
+      if (prev && prev.w >= need) return prev.url;
       const url = URL.createObjectURL(b);
-      thumbs.set(key, url);
-      waiting.delete(key);
+      if (prev) oldThumbs.push(prev.url); // another card may still be showing it
+      thumbs.set(key, { url, w: need });
       return url;
-    }).catch((e) => { waiting.delete(key); throw e; }));
+    }).catch((e) => { waiting.delete(wkey); throw e; }));
   }
-  return waiting.get(key);
+  return waiting.get(wkey);
 }
 
 const io = new IntersectionObserver((entries) => {
@@ -366,6 +381,29 @@ const io = new IntersectionObserver((entries) => {
     thumbFor(p).then((url) => { const img = $('.pimg', card); if (img) img.src = url; card.classList.add('ready'); }).catch(() => card.classList.add('failed'));
   }
 }, { rootMargin: '800px 0px' });
+
+// ---------- grid zoom ----------
+
+const GZ_STEPS = [90, 118, 148, 200, 260, 340, 440, 600];
+const gzDefault = () => (window.innerWidth <= 860 ? 1 : 2);
+let gzIndex = (() => {
+  try {
+    const v = localStorage.getItem('ppdf.gridZoom');
+    if (v !== null && Number(v) >= 0 && Number(v) < GZ_STEPS.length) return Number(v);
+  } catch { /* private mode */ }
+  return gzDefault();
+})();
+
+function applyGridSize(px) { $('#grid').style.setProperty('--thumb', `${Math.round(px)}px`); }
+
+function setGridZoom(i) {
+  gzIndex = Math.max(0, Math.min(GZ_STEPS.length - 1, i));
+  try { localStorage.setItem('ppdf.gridZoom', String(gzIndex)); } catch { /* private mode */ }
+  applyGridSize(GZ_STEPS[gzIndex]);
+  $('#gzOut').disabled = gzIndex === 0;
+  $('#gzIn').disabled = gzIndex === GZ_STEPS.length - 1;
+  if (S.pages.length) renderGrid(); // fetches sharper thumbnails where needed
+}
 
 // ---------- grid ----------
 
@@ -384,6 +422,7 @@ function renderGrid() {
   const grid = $('#grid');
   io.disconnect();
   const multi = new Set(S.pages.map((p) => p.src)).size > 1;
+  const need = thumbWidth();
   const frag = document.createDocumentFragment();
   S.pages.forEach((p, k) => {
     const { box, img } = pageBox(p, k);
@@ -397,7 +436,9 @@ function renderGrid() {
         iconBtn('rotr', 'Rotate right', () => rotate([p], 90), 'mini'),
         iconBtn('pen', 'Sign or add text', () => openEditor(p.id), 'mini'),
         iconBtn('trash', 'Delete page', () => removePages([p]), 'mini')));
-    if (thumbs.has(key)) { img.src = thumbs.get(key); card.classList.add('ready'); } else io.observe(card);
+    const t = thumbs.get(key);
+    if (t) { img.src = t.url; card.classList.add('ready'); }
+    if (!t || t.w < need) io.observe(card);
     frag.append(card);
   });
   grid.replaceChildren(frag);
@@ -491,9 +532,19 @@ async function insertBlank() {
 // ---------- drag to reorder (mouse: drag; touch: long-press then drag) ----------
 
 let dragJustEnded = false;
+let cancelGridDrag = () => {};
 (function dragging() {
   const grid = $('#grid');
   let st = null;
+  cancelGridDrag = () => {
+    if (!st) return;
+    clearTimeout(st.timer);
+    if (st.active) {
+      st.ghost.remove();
+      $$('.moving, .drop-before, .drop-after', grid).forEach((c) => c.classList.remove('moving', 'drop-before', 'drop-after'));
+    }
+    st = null;
+  };
   grid.addEventListener('pointerdown', (e) => {
     const card = e.target.closest('.card');
     if (!card || e.button || e.target.closest('button')) return;
@@ -567,6 +618,41 @@ let dragJustEnded = false;
   window.addEventListener('pointerup', end);
   window.addEventListener('pointercancel', end);
   grid.addEventListener('contextmenu', (e) => { if (st?.touch) e.preventDefault(); });
+})();
+
+// Pinch the page grid with two fingers to make the pages bigger or smaller.
+(function gridPinch() {
+  const grid = $('#grid');
+  const pts = new Map();
+  let pinch = null;
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+  grid.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) {
+      cancelGridDrag();
+      const cell = $('.card', grid)?.getBoundingClientRect().width || GZ_STEPS[gzIndex];
+      pinch = { d0: dist(), size0: Math.min(cell, GZ_STEPS[GZ_STEPS.length - 1]) };
+    }
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!pinch || pts.size < 2) return;
+    e.preventDefault();
+    applyGridSize(Math.max(70, Math.min(680, pinch.size0 * (dist() / pinch.d0))));
+  }, { passive: false });
+  window.addEventListener('touchmove', (e) => { if (pinch && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  const end = (e) => {
+    if (!pts.delete(e.pointerId) || !pinch || pts.size >= 2) return;
+    const px = parseFloat(grid.style.getPropertyValue('--thumb')) || GZ_STEPS[gzIndex];
+    let best = 0;
+    GZ_STEPS.forEach((v, i) => { if (Math.abs(v - px) < Math.abs(GZ_STEPS[best] - px)) best = i; });
+    pinch = null;
+    setGridZoom(best);
+  };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
 })();
 
 // ---------- building and saving ----------
@@ -842,12 +928,13 @@ function panelForm() {
 
 // ---------- page editor ----------
 
-const ED = { open: false, k: 0, sel: null, placing: null, url: null };
+const ED = { open: false, k: 0, sel: null, placing: null, url: null, zoom: 1, fitW: 0, ptW: 1 };
+const ED_MIN = 0.5, ED_MAX = 6;
 
 function openEditor(pageId, placing = null) {
   const k = S.pages.findIndex((p) => p.id === pageId);
   if (k < 0) return;
-  ED.open = true; ED.k = k; ED.sel = null; ED.placing = placing;
+  ED.open = true; ED.k = k; ED.sel = null; ED.placing = placing; ED.zoom = 1;
   $('#editor').hidden = false;
   document.body.classList.add('editing');
   renderEditor();
@@ -884,12 +971,15 @@ function renderEditor() {
   if (ED.placing) box.classList.add('placing');
   const sr = stage.getBoundingClientRect();
   const maxW = Math.max(200, sr.width - 24), maxH = Math.max(200, sr.height - 24);
-  const w = Math.min(maxW, maxH * (d.w / d.h));
+  ED.fitW = Math.min(maxW, maxH * (d.w / d.h));
+  ED.ptW = d.w * (96 / 72); // width in CSS pixels at 100% (actual size)
+  const w = ED.fitW * ED.zoom;
   box.style.width = `${w}px`;
+  updateZoomUi();
   const key = `${p.src}:${p.i}`;
-  if (thumbs.has(key)) img.src = thumbs.get(key); // sharp version replaces it below
+  if (thumbs.has(key)) img.src = thumbs.get(key).url; // sharp version replaces it below
   const token = ++edRenderToken;
-  const px = Math.min(2400, w * (d.bw / d.w) * Math.min(2.5, (window.devicePixelRatio || 1) * 1.25));
+  const px = Math.min(ED.zoom > 1 ? 4200 : 2400, w * (d.bw / d.w) * Math.min(2.5, (window.devicePixelRatio || 1) * 1.25));
   if (ED.url && ED.urlKey === `${key}:${Math.round(px)}`) img.src = ED.url;
   else {
     E.renderPage(S.srcs.get(p.src), p.i, { width: px, quality: 0.9, urgent: true }).then((b) => {
@@ -901,7 +991,43 @@ function renderEditor() {
     }).catch(() => {});
   }
   if (ED.sel) box.querySelector(`[data-oid="${ED.sel}"]`)?.classList.add('selected');
+  const sl = stage.scrollLeft, stp = stage.scrollTop;
   stage.replaceChildren(box);
+  stage.scrollLeft = sl; stage.scrollTop = stp; // keep the view when the page is redrawn
+  stage.classList.toggle('can-pan', ED.zoom > 1.01);
+}
+
+function updateZoomUi() {
+  $('#ezFit').textContent = `${Math.round(((ED.fitW * ED.zoom) / ED.ptW) * 100)}%`;
+  $('#ezOut').disabled = ED.zoom <= ED_MIN + 1e-6;
+  $('#ezIn').disabled = ED.zoom >= ED_MAX - 1e-6;
+}
+
+// Zooms the editor page, keeping the point under (cx, cy) where it is.
+let edZoomTimer;
+function setEdZoom(z, cx, cy) {
+  z = Math.max(ED_MIN, Math.min(ED_MAX, z));
+  if (Math.abs(z - ED.zoom) < 1e-4) return;
+  const stage = $('#edStage'), box = $('.ed-box', stage);
+  ED.zoom = z;
+  if (!box) return;
+  const sr = stage.getBoundingClientRect();
+  if (cx == null) { cx = sr.left + sr.width / 2; cy = sr.top + sr.height / 2; }
+  const r = box.getBoundingClientRect();
+  const fx = (cx - r.left) / r.width, fy = (cy - r.top) / r.height;
+  box.style.width = `${ED.fitW * z}px`;
+  const n = box.getBoundingClientRect();
+  stage.scrollLeft += n.left + fx * n.width - cx;
+  stage.scrollTop += n.top + fy * n.height - cy;
+  stage.classList.toggle('can-pan', z > 1.01);
+  updateZoomUi();
+  clearTimeout(edZoomTimer);
+  edZoomTimer = setTimeout(() => { if (ED.open) renderEditor(); }, 220); // sharper render at the new size
+}
+function fitEdZoom() {
+  setEdZoom(1);
+  const stage = $('#edStage');
+  stage.scrollLeft = 0; stage.scrollTop = 0;
 }
 
 function edPage() { return S.pages[ED.k]; }
@@ -1011,10 +1137,32 @@ function deleteOverlay(id = ED.sel) {
 
 (function editorPointer() {
   const stage = $('#edStage');
-  let drag = null;
+  let drag = null, pinch = null, pan = null;
+  const pts = new Map();
+  const two = () => [...pts.values()].slice(0, 2);
+  const scrollable = () => stage.scrollWidth > stage.clientWidth + 1 || stage.scrollHeight > stage.clientHeight + 1;
+  const startPan = (e) => {
+    if (!scrollable()) return;
+    pan = { id: e.pointerId, x: e.clientX, y: e.clientY, sl: stage.scrollLeft, st: stage.scrollTop };
+    stage.classList.add('panning');
+    try { stage.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+  };
   stage.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') {
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) {
+        // A second finger: stop what the first one was doing and zoom instead.
+        if (drag?.moved) { undoStack.push(drag.before); redoStack = []; }
+        drag = null; pan = null; stage.classList.remove('panning');
+        const [a, b] = two();
+        pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: ED.zoom };
+        e.preventDefault();
+        return;
+      }
+      if (pts.size > 2) return;
+    }
     const box = $('.ed-box', stage);
-    if (!box || !box.contains(e.target)) { if (!e.target.closest('.ov')) { commitTextEdit(); if (ED.sel) { ED.sel = null; renderEditor(); } } return; }
+    if (!box || !box.contains(e.target)) { if (!e.target.closest('.ov')) { commitTextEdit(); if (ED.sel) { ED.sel = null; renderEditor(); } startPan(e); } return; }
     if (e.target.closest('.ov-edit')) return;
     const r = box.getBoundingClientRect();
     const u = (e.clientX - r.left) / r.width, v = (e.clientY - r.top) / r.height;
@@ -1022,7 +1170,7 @@ function deleteOverlay(id = ED.sel) {
     const del = e.target.closest('.ov-del');
     if (del) { e.preventDefault(); deleteOverlay(Number(del.parentElement.dataset.oid)); return; }
     const ovEl = e.target.closest('.ov');
-    if (!ovEl) { commitTextEdit(); if (ED.sel) { ED.sel = null; renderEditor(); } return; }
+    if (!ovEl) { commitTextEdit(); if (ED.sel) { ED.sel = null; renderEditor(); } startPan(e); return; }
     e.preventDefault();
     commitTextEdit();
     const id = Number(ovEl.dataset.oid);
@@ -1034,6 +1182,18 @@ function deleteOverlay(id = ED.sel) {
     stage.setPointerCapture(e.pointerId);
   });
   stage.addEventListener('pointermove', (e) => {
+    if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch) {
+      if (pts.size < 2) return;
+      const [a, b] = two();
+      setEdZoom(pinch.z0 * (Math.hypot(a.x - b.x, a.y - b.y) / pinch.d0), (a.x + b.x) / 2, (a.y + b.y) / 2);
+      return;
+    }
+    if (pan && e.pointerId === pan.id) {
+      stage.scrollLeft = pan.sl - (e.clientX - pan.x);
+      stage.scrollTop = pan.st - (e.clientY - pan.y);
+      return;
+    }
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.moved && Math.hypot(dx, dy) < 3) return;
@@ -1060,7 +1220,10 @@ function deleteOverlay(id = ED.sel) {
       el.style.left = `${o.u * 100}%`; el.style.top = `${o.v * 100}%`;
     }
   });
-  const end = () => {
+  const end = (e) => {
+    pts.delete(e.pointerId);
+    if (pinch) { if (pts.size < 2) pinch = null; return; }
+    if (pan && e.pointerId === pan.id) { pan = null; stage.classList.remove('panning'); }
     if (!drag) return;
     const d = drag;
     drag = null;
@@ -1069,6 +1232,11 @@ function deleteOverlay(id = ED.sel) {
   };
   stage.addEventListener('pointerup', end);
   stage.addEventListener('pointercancel', end);
+  stage.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return; // Ctrl + mouse wheel, or a trackpad pinch
+    e.preventDefault();
+    setEdZoom(ED.zoom * Math.exp(-e.deltaY * 0.0025), e.clientX, e.clientY);
+  }, { passive: false });
   stage.addEventListener('dblclick', (e) => {
     const ovEl = e.target.closest('.ov-text');
     if (ovEl && !editing) startTextEdit(Number(ovEl.dataset.oid));
@@ -1148,6 +1316,19 @@ function init() {
 
   // Editor
   $('#edBack').addEventListener('click', closeEditor);
+  $('#ezIn').addEventListener('click', () => setEdZoom(ED.zoom * 1.25));
+  $('#ezOut').addEventListener('click', () => setEdZoom(ED.zoom / 1.25));
+  $('#ezFit').addEventListener('click', fitEdZoom);
+  $('#gzIn').addEventListener('click', () => setGridZoom(gzIndex + 1));
+  $('#gzOut').addEventListener('click', () => setGridZoom(gzIndex - 1));
+  setGridZoom(gzIndex);
+  let wheelAcc = 0;
+  document.addEventListener('wheel', (e) => {
+    if ((!e.ctrlKey && !e.metaKey) || ED.open || $('#work').hidden) return;
+    e.preventDefault();
+    wheelAcc += e.deltaY;
+    if (Math.abs(wheelAcc) >= 60) { setGridZoom(gzIndex + (wheelAcc < 0 ? 1 : -1)); wheelAcc = 0; }
+  }, { passive: false });
   $('#edPrev').addEventListener('click', () => { commitTextEdit(); ED.k--; ED.sel = null; renderEditor(); });
   $('#edNext').addEventListener('click', () => { commitTextEdit(); ED.k++; ED.sel = null; renderEditor(); });
   $('#edDelete').addEventListener('click', () => deleteOverlay());
@@ -1162,6 +1343,13 @@ function init() {
     if ($('#work').hidden) return;
     if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); savePdf(); return; }
     if (typing) return;
+    if (mod && ['=', '+', '-', '_', '0'].includes(e.key)) {
+      e.preventDefault();
+      const dir = e.key === '0' ? 0 : e.key === '-' || e.key === '_' ? -1 : 1;
+      if (ED.open) { if (dir === 0) fitEdZoom(); else setEdZoom(ED.zoom * (dir > 0 ? 1.25 : 0.8)); }
+      else setGridZoom(dir === 0 ? gzDefault() : gzIndex + dir);
+      return;
+    }
     if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); if (ED.open) renderEditor(); return; }
     if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); if (ED.open) renderEditor(); return; }
     if (ED.open) {
