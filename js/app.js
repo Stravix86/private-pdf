@@ -77,7 +77,8 @@ async function busy(label, fn) {
   const bar = $('#busyBar');
   bar.style.width = '0%';
   o.hidden = false;
-  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  // Let the overlay paint first (the timeout covers background tabs, where frames are paused).
+  await new Promise((r) => { requestAnimationFrame(() => setTimeout(r, 0)); setTimeout(r, 50); });
   try {
     return await fn((p) => { bar.style.width = `${Math.round(Math.min(1, p) * 100)}%`; });
   } catch (e) {
