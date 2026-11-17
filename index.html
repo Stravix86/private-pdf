@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Private PDF: merge, compress, sign and edit PDFs on your device</title>
+<meta name="description" content="Merge, split, compress, sign, fill and convert PDFs without uploading them. Free, no account, works offline.">
+<meta name="theme-color" content="#f6f6f7">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+<script>try{var t=localStorage.getItem('ppdf.theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./"><img src="icons/icon.svg" alt="" width="26" height="26"><span>Private PDF</span></a>
+  <span class="badge" title="Files are processed on this device and never uploaded">Files stay on your device</span>
+  <span class="spacer"></span>
+  <button id="supportBtn" class="btn ghost" type="button" hidden>Support</button>
+  <button id="themeBtn" class="icon-btn" type="button" aria-label="Switch theme"></button>
+</header>
+
+<main id="home">
+  <section class="hero">
+    <h1>PDF tools that run on your device</h1>
+    <p class="lead">Merge, split, compress, sign, fill and convert PDFs. Nothing is uploaded, so it works offline and is safe for contracts, IDs and medical or financial documents.</p>
+    <label class="drop" id="drop">
+      <input type="file" id="fileInput" multiple accept=".pdf,application/pdf,image/*" hidden>
+      <span class="drop-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/></svg></span>
+      <strong>Choose PDFs or images</strong>
+      <span>or drop them here</span>
+    </label>
+  </section>
+
+  <section class="tools" id="tools" aria-label="Tools">
+    <button type="button" data-tool="merge"><b>Merge</b><span>Combine several PDFs and images into one file.</span></button>
+    <button type="button" data-tool="organize"><b>Organize pages</b><span>Reorder, rotate, delete or duplicate pages.</span></button>
+    <button type="button" data-tool="compress"><b>Compress</b><span>Reduce file size for email and upload limits.</span></button>
+    <button type="button" data-tool="split"><b>Split and extract</b><span>Save page ranges or single pages as new files.</span></button>
+    <button type="button" data-tool="sign"><b>Sign</b><span>Add a signature, text, dates and ticks to any page.</span></button>
+    <button type="button" data-tool="form"><b>Fill forms</b><span>Complete form fields and lock the answers.</span></button>
+    <button type="button" data-tool="topdf"><b>Images to PDF</b><span>Turn photos and scans into a PDF.</span></button>
+    <button type="button" data-tool="images"><b>PDF to images</b><span>Export pages as JPG or PNG.</span></button>
+    <button type="button" data-tool="stamp"><b>Page numbers and watermark</b><span>Number pages or mark them as a draft or confidential.</span></button>
+  </section>
+
+  <section class="facts">
+    <div><h2>No uploads</h2><p>Files are read and written in this browser tab or app. They are never sent to a server, including ours.</p></div>
+    <div><h2>No limits</h2><p>No account, file size cap, daily quota or watermark on your output.</p></div>
+    <div><h2>Works offline</h2><p>Once loaded, it keeps working without a connection. It can also be installed as an app.</p></div>
+  </section>
+
+  <footer class="foot">
+    <span id="getApps">Also available for <a href="https://github.com/Stravix86/private-pdf/releases/latest/download/PrivatePDF-windows.exe">Windows</a> and <a href="https://github.com/Stravix86/private-pdf/releases/latest/download/PrivatePDF-android.apk">Android</a>.</span>
+    <span><a id="repoLink" href="#">Source code</a> · MIT licence</span>
+    <span id="supportFoot" hidden>Free to use. <a href="#" onclick="document.getElementById('supportBtn').click();return false">Support development</a></span>
+  </footer>
+</main>
+
+<main id="work" hidden>
+  <div class="bar">
+    <div class="doc">
+      <input id="docName" aria-label="File name" spellcheck="false">
+      <span id="pageCount" class="muted"></span>
+    </div>
+    <div class="bar-actions">
+      <button id="undoBtn" class="icon-btn" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
+      <button id="redoBtn" class="icon-btn" type="button" title="Redo (Ctrl+Y)" aria-label="Redo" disabled><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></button>
+      <label class="btn"><input type="file" id="addInput" multiple accept=".pdf,application/pdf,image/*" hidden>Add files</label>
+      <button id="closeBtn" class="btn ghost" type="button">Close</button>
+    </div>
+  </div>
+
+  <div class="selbar" id="selbar">
+    <span id="selInfo" class="sel-info">All pages</span>
+    <button id="selRotL" class="icon-btn" type="button" title="Rotate left" aria-label="Rotate left"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+    <button id="selRotR" class="icon-btn" type="button" title="Rotate right" aria-label="Rotate right"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    <span class="sep"></span>
+    <button id="selFirst" class="icon-btn" type="button" title="Move to start" aria-label="Move to start" data-needs-sel><svg viewBox="0 0 24 24"><path d="M18 17l-5-5 5-5"/><path d="M11 17l-5-5 5-5"/></svg></button>
+    <button id="selLeft" class="icon-btn" type="button" title="Move back one" aria-label="Move back one" data-needs-sel><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <button id="selRight" class="icon-btn" type="button" title="Move forward one" aria-label="Move forward one" data-needs-sel><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+    <button id="selLast" class="icon-btn" type="button" title="Move to end" aria-label="Move to end" data-needs-sel><svg viewBox="0 0 24 24"><path d="M6 17l5-5-5-5"/><path d="M13 17l5-5-5-5"/></svg></button>
+    <span class="sep"></span>
+    <button id="selDup" class="icon-btn" type="button" title="Duplicate" aria-label="Duplicate" data-needs-sel><svg viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button>
+    <button id="selExtract" class="icon-btn" type="button" title="Save selected pages as a new PDF" aria-label="Save selected pages as a new PDF" data-needs-sel><svg viewBox="0 0 24 24"><path d="M14 3h7v7"/><path d="M10 14L21 3"/><path d="M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/></svg></button>
+    <button id="selDel" class="icon-btn danger" type="button" title="Delete" aria-label="Delete" data-needs-sel><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg></button>
+    <button id="selClear" class="link" type="button" hidden>Clear selection</button>
+  </div>
+
+  <div class="layout">
+    <div class="grid" id="grid" role="list" aria-label="Pages"></div>
+    <aside class="panel" id="panel">
+      <nav class="tabs" id="tabs" role="tablist"></nav>
+      <div class="panel-head"><button id="panelClose" class="icon-btn" type="button" aria-label="Hide panel"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+      <div class="panel-body" id="panelBody"></div>
+      <div class="panel-foot">
+        <button id="saveBtn" class="btn primary" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Save PDF</button>
+        <button id="shareBtn" class="btn" type="button" hidden>Share</button>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<div id="editor" class="editor" hidden>
+  <div class="ed-bar">
+    <button id="edBack" class="btn ghost" type="button">Done</button>
+    <div class="ed-nav">
+      <button id="edPrev" class="icon-btn" type="button" aria-label="Previous page"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <span id="edPage"></span>
+      <button id="edNext" class="icon-btn" type="button" aria-label="Next page"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+    </div>
+    <div class="ed-tools" id="edTools">
+      <button type="button" data-tool="sign"><svg viewBox="0 0 24 24"><path d="M3 17c3-4 5-6 6-6s1 4 3 4 3-5 5-5 2 3 4 3"/><path d="M3 21h18"/></svg><span>Signature</span></button>
+      <button type="button" data-tool="text"><svg viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg><span>Text</span></button>
+      <button type="button" data-tool="date"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Date</span></button>
+      <button type="button" data-tool="tick"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg><span>Tick</span></button>
+      <button type="button" data-tool="cross"><svg viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg><span>Cross</span></button>
+      <button type="button" data-tool="rect"><svg viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="10" rx="1"/></svg><span>White-out</span></button>
+      <button id="edDelete" type="button" class="danger" disabled><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg><span>Remove</span></button>
+    </div>
+    <div id="sigMenu" class="sig-menu" hidden></div>
+  </div>
+  <div class="ed-main">
+    <p id="edHint" class="ed-hint" hidden></p>
+    <div id="edStage" class="ed-stage"></div>
+  </div>
+</div>
+
+<dialog id="pwDlg">
+  <form method="dialog">
+    <h2 id="pwTitle">Password required</h2>
+    <p id="pwMsg" class="muted"></p>
+    <input id="pwInput" type="password" autocomplete="off" aria-label="Password">
+    <div class="dlg-actions"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="ok">Open</button></div>
+  </form>
+</dialog>
+
+<dialog id="signDlg" class="sign-dlg">
+  <form method="dialog">
+    <h2>Create a signature</h2>
+    <div class="seg" id="sigTabs" role="tablist">
+      <button type="button" data-mode="draw" role="tab">Draw</button>
+      <button type="button" data-mode="type" role="tab">Type</button>
+      <button type="button" data-mode="upload" role="tab">Upload</button>
+    </div>
+    <div data-sigpane="draw">
+      <div class="pad-wrap"><canvas id="sigPad"></canvas><span id="sigPadHint" class="pad-hint">Sign here with your mouse, finger or pen</span><span class="pad-line"></span></div>
+      <button type="button" id="sigClear" class="link">Clear</button>
+    </div>
+    <div data-sigpane="type" hidden>
+      <input id="sigText" type="text" placeholder="Your name" autocomplete="name">
+      <select id="sigFont" aria-label="Style"></select>
+      <canvas id="sigTypePreview" class="type-preview"></canvas>
+    </div>
+    <div data-sigpane="upload" hidden>
+      <label class="btn"><input id="sigFile" type="file" accept="image/*" hidden>Choose a photo of your signature</label>
+      <p class="muted small">Sign on white paper and photograph it. The paper is removed automatically.</p>
+      <img id="sigUploadPreview" class="upload-preview" alt="" hidden>
+    </div>
+    <div class="sig-opts">
+      <div class="inks" id="sigInks" role="group" aria-label="Ink colour">
+        <button type="button" data-ink="#111111" aria-pressed="true" aria-label="Black" style="--ink:#111111"></button>
+        <button type="button" data-ink="#1d3f9b" aria-pressed="false" aria-label="Blue" style="--ink:#1d3f9b"></button>
+      </div>
+      <label class="check"><input type="checkbox" id="sigRemember" checked><span>Save on this device</span></label>
+    </div>
+    <div class="dlg-actions"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="ok">Use signature</button></div>
+  </form>
+</dialog>
+
+<dialog id="supportDlg">
+  <form method="dialog">
+    <h2>Support Private PDF</h2>
+    <p>Private PDF is free, with no limits and no ads, and your files never leave your device. If it saves you time or a subscription, you can pay what you think it's worth.</p>
+    <div class="dlg-actions"><button class="btn ghost" value="close">Close</button><a id="supportLink" class="btn primary" href="#" target="_blank" rel="noopener">Pay what you want</a></div>
+  </form>
+</dialog>
+
+<div id="busy" class="busy" hidden><div class="busy-card"><div class="spinner"></div><p id="busyText">Working…</p><div class="progress"><span id="busyBar"></span></div></div></div>
+<div id="toast" class="toast" role="status" hidden></div>
+<div class="drop-cover" aria-hidden="true"><p>Drop to add files</p></div>
+</body>
+</html>

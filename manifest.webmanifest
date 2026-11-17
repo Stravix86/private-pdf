@@ -1,0 +1,20 @@
+{
+  "name": "Private PDF",
+  "short_name": "Private PDF",
+  "description": "Merge, split, compress, sign and fill PDFs on your device. Nothing is uploaded.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f6f7",
+  "theme_color": "#c62828",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "file_handlers": [
+    { "action": "./", "accept": { "application/pdf": [".pdf"] } }
+  ],
+  "launch_handler": { "client_mode": "focus-existing" }
+}
